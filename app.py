@@ -3,38 +3,42 @@ import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-st.title("📄 AI-Powered Resume Analyzer")
+st.set_page_config(page_title="AI Resume Analyzer", layout="centered")
 
-# Upload CSV
-uploaded_file = st.file_uploader("📥 Upload CSV Resume Dataset", type=["csv"])
+st.title("📄 AI-Powered Resume Analyzer")
+st.write("Upload your resume dataset (CSV) and a job description to find the best-matched resumes.")
+
+# File uploader
+uploaded_file = st.file_uploader("📂 Upload Resume Dataset (CSV)", type=["csv"])
+
+# Job Description input
 job_description = st.text_area("📝 Enter the Job Description", height=200)
 
-if uploaded_file and job_description:
+# When both file and job description are provided
+if uploaded_file is not None and job_description:
     # Load resumes
-    try:
-        df = pd.read_csv(uploaded_file)
-        if 'Resume' not in df.columns:
-            st.error("CSV must have a 'Resume' column.")
-        else:
-            # TF-IDF Vectorization
-            resumes = df['Resume'].astype(str)
-            documents = resumes.tolist() + [job_description]
-            vectorizer = TfidfVectorizer(stop_words='english')
-            tfidf_matrix = vectorizer.fit_transform(documents)
+    df = pd.read_csv(uploaded_file)
 
-            # Cosine Similarity
-            job_vector = tfidf_matrix[-1]
-            resume_vectors = tfidf_matrix[:-1]
-            similarities = cosine_similarity(job_vector, resume_vectors)[0]
+    if 'Resume' not in df.columns:
+        st.error("❌ CSV must have a 'Resume' column.")
+    else:
+        # Vectorize resumes and job description
+        vectorizer = TfidfVectorizer(stop_words='english')
+        resume_vectors = vectorizer.fit_transform(df['Resume'].astype(str))
+        job_vector = vectorizer.transform([job_description])
 
-            # Add scores to DataFrame
-            df['Match Score (%)'] = (similarities * 100).round(2)
-            df_sorted = df.sort_values(by='Match Score (%)', ascending=False)
+        # Calculate similarity
+        similarity_scores = cosine_similarity(job_vector, resume_vectors).flatten()
+        df['Match Score (%)'] = (similarity_scores * 100).round(2)
 
-            st.success("✅ Resumes analyzed successfully!")
-            st.dataframe(df_sorted[['Resume', 'Match Score (%)']])
-    except Exception as e:
-        st.error(f"Error: {e}")
+        # Sort by best match
+        top_matches = df.sort_values(by='Match Score (%)', ascending=False)
 
+        # Display top 5 matches
+        st.subheader("🔍 Top Matching Resumes:")
+        st.dataframe(top_matches[['Resume', 'Match Score (%)']].head(5))
+
+        # Option to download results
+        st.download_button("⬇️ Download Full Match Results as CSV", top_matches.to_csv(index=False), file_name='resume_matches.csv', mime='text/csv')
 else:
-    st.warning("Please upload a CSV file and enter a job description to get started.")
+    st.info("Please upload a CSV file and provide a job description to get started.")
