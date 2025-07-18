@@ -1,34 +1,48 @@
 # interview_chatbot.py
+
 import openai
 import streamlit as st
 
-# Load API key securely
-openai.api_key = st.secrets["openai_api_key"]
+def generate_interview_question(resume_text, job_description):
+    prompt = f"""
+    You are a professional HR Interviewer. Based on the following resume and job description, ask a relevant interview question.
+    
+    Resume: {resume_text}
+    Job Description: {job_description}
+    
+    Interview Question:
+    """
 
-st.title("🤖 AI Interview Coach")
-st.markdown("Ask questions or practice your interview based on your resume!")
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "user", "content": prompt}
+        ],
+        max_tokens=150,
+        temperature=0.7
+    )
 
-if "messages" not in st.session_state:
-    st.session_state["messages"] = [
-        {"role": "system", "content": "You are an AI Interview Coach. Ask or answer questions related to resume skills and job descriptions. Be professional."}
-    ]
+    return response['choices'][0]['message']['content'].strip()
 
-for msg in st.session_state["messages"]:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
 
-prompt = st.chat_input("Ask me an interview question or describe a role...")
-if prompt:
-    st.session_state["messages"].append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
+def chat_with_candidate(user_input, resume_text, job_description):
+    prompt = f"""
+    You are simulating an AI Interview Coach. Based on the candidate's response, ask a follow-up question or provide feedback. Stay professional.
 
-    with st.chat_message("assistant"):
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=st.session_state["messages"]
-        )
-        reply = response.choices[0].message.content
-        st.markdown(reply)
+    Resume: {resume_text}
+    Job Description: {job_description}
+    Candidate Response: {user_input}
+    
+    AI Interviewer:
+    """
 
-    st.session_state["messages"].append({"role": "assistant", "content": reply})
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "user", "content": prompt}
+        ],
+        max_tokens=200,
+        temperature=0.7
+    )
+
+    return response['choices'][0]['message']['content'].strip()
