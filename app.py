@@ -1,84 +1,74 @@
+# app.py
 import streamlit as st
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from interview_chatbot import generate_interview_question, chat_with_candidate
+import base64
 
-st.set_page_config(page_title="AI Resume Analyzer & Interview Coach", layout="centered")
-
+st.set_page_config(page_title="AI-Powered Resume Analyzer", layout="centered")
 st.title("📄 AI-Powered Resume Analyzer")
-st.markdown("Upload your resume dataset and enter a job description to see which resumes match best and get interview questions.")
 
-# Step 1: Upload CSV
+st.markdown("""
+Upload your **CSV resume dataset** and enter a **job description**.
+The AI will analyze which resumes are the best match and you can launch an **AI Interview Coach** for practice.
+""")
+
 uploaded_file = st.file_uploader("📤 Upload CSV Resume Dataset", type=["csv"])
 job_description = st.text_area("📝 Enter the Job Description")
 
 if uploaded_file and job_description:
-    data = pd.read_csv(uploaded_file)
-
-    if "Resume" not in data.columns:
-        st.error("❌ CSV must contain a 'Resume' column.")
+    df = pd.read_csv(uploaded_file)
+    if 'Resume' not in df.columns:
+        st.error("CSV must contain a column named 'Resume'.")
     else:
-        st.success("✅ Data loaded successfully!")
+        st.success("✅ File and job description accepted!")
 
-        # Step 2: Vectorize
-        tfidf = TfidfVectorizer(stop_words="english")
-        resume_tfidf = tfidf.fit_transform(data["Resume"].astype(str))
-        job_tfidf = tfidf.transform([job_description])
+        vectorizer = TfidfVectorizer(stop_words='english')
+        tfidf_matrix = vectorizer.fit_transform(df['Resume'].astype(str))
+        job_vec = vectorizer.transform([job_description])
 
-        # Step 3: Similarity
-        similarity_scores = cosine_similarity(job_tfidf, resume_tfidf).flatten()
-        data["Match_Score"] = similarity_scores
-        top_matches = data.sort_values("Match_Score", ascending=False).head(5)
+        similarities = cosine_similarity(job_vec, tfidf_matrix).flatten()
+        df['Score'] = similarities
+        top_matches = df.sort_values(by='Score', ascending=False).head(5)
 
-        st.markdown("### 🏆 Top 5 Matching Resumes")
-        st.dataframe(top_matches[["Resume", "Match_Score"]], use_container_width=True)
+        st.subheader("🏆 Top Matching Resumes")
+        st.dataframe(top_matches[['Resume', 'Score']])
 
-        # Interview Coach
-        if st.button("🎯 Show Interview Questions for Top Match"):
-            top_resume = top_matches.iloc[0]["Resume"]
+        st.download_button(
+            label="⬇ Download Top 5 Matches as CSV",
+            data=top_matches.to_csv(index=False).encode('utf-8'),
+            file_name='top_matches.csv',
+            mime='text/csv'
+        )
 
-            # Step 4: Extract Skills
-            common_skills = [
-                "Python", "Machine Learning", "Data Science", "SQL", "Deep Learning",
-                "Java", "Communication", "Teamwork", "Leadership", "NLP",
-                "Computer Vision", "Project Management"
-            ]
-            found_skills = [skill for skill in common_skills if skill.lower() in top_resume.lower()]
+        # --- Interview Coach ---
+        if st.checkbox("🧠 Launch AI Interview Coach"):
+            st.subheader("💬 Mock Interview Chatbot")
 
-            st.markdown("### 🤖 Top Skills Detected:")
-            if found_skills:
-                st.write(", ".join(found_skills))
-            else:
-                st.write("No common skills found.")
+            resume_text = st.text_area("📌 Paste a selected resume")
+            job_text = st.text_area("📌 Paste the job description again")
 
-            st.markdown("### 🧪 Sample Interview Questions:")
-            for skill in found_skills:
-                st.write(f"**{skill}**:")
-                if skill == "Python":
-                    st.write("- What are Python decorators?")
-                    st.write("- How does Python manage memory?")
-                elif skill == "Machine Learning":
-                    st.write("- What is overfitting and how do you prevent it?")
-                    st.write("- Explain supervised vs unsupervised learning.")
-                elif skill == "SQL":
-                    st.write("- What is a JOIN? Different types?")
-                    st.write("- Write a SQL query to find duplicates.")
-                elif skill == "Deep Learning":
-                    st.write("- What is backpropagation?")
-                    st.write("- Difference between CNN and RNN?")
-                elif skill == "Java":
-                    st.write("- Explain inheritance in Java.")
-                    st.write("- What is the JVM?")
-                elif skill == "Communication":
-                    st.write("- Describe a time you resolved a conflict.")
-                elif skill == "Leadership":
-                    st.write("- How do you motivate a team?")
-                elif skill == "Project Management":
-                    st.write("- Tools used in project management?")
-                    st.write("- Agile vs Waterfall?")
+            if st.button("🎯 Generate First Interview Question"):
+                if resume_text and job_text:
+                    question = generate_interview_question(resume_text, job_text)
+                    st.session_state.chat_history = [
+                        {"role": "system", "content": "You are an AI Interviewer. Ask job-related questions."},
+                        {"role": "assistant", "content": question}
+                    ]
                 else:
-                    st.write(f"- Tell us about your experience with {skill}.")
+                    st.warning("Please provide both resume and job description.")
 
-            st.info("✅ Interview questions generated based on resume content.")
+            if "chat_history" in st.session_state:
+                for msg in st.session_state.chat_history[1:]:
+                    st.chat_message(msg["role"]).write(msg["content"])
+
+                user_input = st.chat_input("Type your response here")
+                if user_input:
+                    st.session_state.chat_history.append({"role": "user", "content": user_input})
+                    ai_reply = chat_with_candidate(st.session_state.chat_history)
+                    st.session_state.chat_history.append({"role": "assistant", "content": ai_reply})
+                    st.experimental_rerun()
+
 else:
-    st.info("Please upload a CSV file and enter a job description to begin.")
+    st.warning("Please upload a CSV file and provide a job description to get started.")
